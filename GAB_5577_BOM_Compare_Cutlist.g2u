@@ -1,0 +1,633 @@
+Program.Sub.Preflight.Start
+Program.Sub.Preflight.End
+
+Program.Sub.Main.Start
+
+F.Intrinsic.Control.SelectCase(V.Caller.Hook)
+	F.Intrinsic.Control.Case(50310)
+		'Preload Hook
+		F.Intrinsic.Control.CallSub(preload)
+	F.Intrinsic.Control.Case(50311)
+		'PreUpload Hook
+		F.Intrinsic.Control.CallSub(preupload)
+	F.Intrinsic.Control.Case(50312)
+		'PostUpload Hook
+		'F.Intrinsic.Control.CallSub(postupload)
+F.Intrinsic.Control.EndSelect
+
+
+'Function.Intrinsic.UI.InvokeWaitDialog("Opening Connection to Database","BOM Integrator")
+'Function.Intrinsic.Control.CallSub(connect)
+
+'Function.Intrinsic.UI.ChangeWaitStatus("Verifying Data")
+'Function.Intrinsic.Control.CallSub("4_VerifyData")
+
+
+'Function.Intrinsic.UI.ChangeWaitStatus("Uploading/Updating Bill of Material Masters")
+'Function.Intrinsic.Control.CallSub("9_BOMUpload")
+
+'Function.Intrinsic.Control.CallSub(unload)
+
+Program.Sub.Main.End
+
+Program.Sub.Unload.Start
+Function.Intrinsic.Control.CallSub(Disconnect)
+Function.Intrinsic.Control.End
+
+Program.Sub.Unload.End
+
+Program.Sub.4_VerifyData.Start
+V.Local.iC.Declare(Long)
+V.Local.sSQL.Declare(String)
+V.Local.sRet.Declare(String)
+V.Local.i2.Declare(Long)
+V.Local.bRet.Declare(Boolean)
+v.Local.sDesc.Declare(String)
+V.Local.sQty.Declare
+V.Local.fQty.Declare
+V.Local.sErrors.Declare
+V.Local.iErrors.Declare
+V.Local.sFile.Declare
+
+'Initialize Error Variables
+F.Intrinsic.String.Concat("ERROR MESSAGE LOG",V.Ambient.NewLine,"=====================================================",V.Local.sErrors)
+V.Local.iErrors.Set(0)
+
+Function.Intrinsic.Control.For(V.Local.iC,0,v.DataTable.dtPreload.RowCount--,1)
+	Function.Intrinsic.UI.ChangeWaitStatus("Checking Critical Exceptions",V.Local.iC,0,V.DataTable.dtPreload.RowCount--)
+
+	'REMOVE 000 REVISIONS
+	F.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).Revision!FieldValTrim,=,"000",or,V.DataTable.dtPreload(V.Local.iC).Revision!FieldValTrim,=,"0")
+		F.Data.DataTable.SetValue("dtPreload",V.Local.iC,"Revision","")
+	F.Intrinsic.Control.EndIf
+
+	'CHECKING FOR MISSING PART NUMBER
+	Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,=,"")
+		F.Intrinsic.String.Build("{2}{3}RECORD FAILED FOR MISSING PART NUMBER ON SEQUENCE {0} WITH PARENT {1}",V.DataTable.dtPreload(V.Local.iC).Sequence!FieldValTrim,V.DataTable.dtPreload(V.Local.iC).Parent!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+		F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+	Function.Intrinsic.Control.EndIf
+
+	'CHECKING FOR RECURSIVE BOM PARENT_NO
+	'Function.Intrinsic.String.Build("FILENAME = '{0}' AND PARENT_NO = '{1}' AND PART = '{1}' AND SEQUENCE <> '0000'",v.DataTable.dtPreload(V.Local.iC).FILENAME!FieldValTrim,v.DataTable.dtPreload(V.Local.iC).PARENT_NO!FieldValTrim,V.Local.sSQL)
+	'Function.Data.DataTable.Select("dtPreload",V.Local.sSQL,V.Local.sSQL)
+	'Function.Intrinsic.Control.If(V.Local.sSQL,<>,"***NORETURN***")
+		'Function.Intrinsic.Control.CallSub(z_addfailure,"iC",V.Local.iC,"FILE_STATUS","CRITICAL","MESSAGE","RECORD FAILED FOR RECURSIVE BOM PARENT_NO")
+	'Function.Intrinsic.Control.EndIf
+
+	'CHECKING FOR CUT PARTS WITH NO DIMENSIONS
+	Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).STOCKNUMBER!FieldValTrim,<>,"")
+	Function.Intrinsic.Control.AndIf(V.DataTable.dtPreload(V.Local.iC).G_L!FieldValTrim,=,"","or",V.DataTable.dtPreload(V.Local.iC).G_L!FieldValTrim,=,"in")
+		Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).SHEET_METAL_WIDTH!FieldValTrim,=,"","or",V.DataTable.dtPreload(V.Local.iC).SHEET_METAL_WIDTH!FieldValTrim,=,"in")
+			F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR CUT PART MISSING DIMENSIONS - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+			F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)	
+		Function.Intrinsic.Control.ElseIf(V.DataTable.dtPreload(V.Local.iC).SHEET_METAL_LENGTH!FieldValTrim,=,"","or",V.DataTable.dtPreload(V.Local.iC).SHEET_METAL_LENGTH!FieldValTrim,=,"in")
+			F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR CUT PART MISSING DIMENSIONS - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+			F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+		Function.Intrinsic.Control.EndIf
+	Function.Intrinsic.Control.EndIf
+	
+
+	'CHECKING FOR CUT PARTS WITH BOTH LENGTH AND Sheet Metal Width/Sheet Metal Length DIMENSIONS
+	Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).STOCKNUMBER!FieldValTrim,<>,"")
+	Function.Intrinsic.Control.AndIf(V.DataTable.dtPreload(V.Local.iC).G_L!FieldValTrim,<>,"")
+	Function.Intrinsic.Control.AndIf(V.DataTable.dtPreload(V.Local.iC).G_L!FieldValTrim,<>,"in")
+		Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).SHEET_METAL_WIDTH!FieldValTrim,<>,"")
+		Function.Intrinsic.Control.AndIf(V.DataTable.dtPreload(V.Local.iC).SHEET_METAL_WIDTH!FieldValTrim,<>,"in")
+		Function.Intrinsic.Control.AndIf(v.DataTable.dtPreload(V.Local.iC).SHEET_METAL_WIDTH!FieldValTrim,<>,"0.000 in")
+		Function.Intrinsic.Control.AndIf(v.DataTable.dtPreload(V.Local.iC).SHEET_METAL_WIDTH!FieldValTrim,<>,"0.0000 in")
+			F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR CUT PART WITH LENGTH AND Sheet Metal Width DIMENSIONS - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+			F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)	
+		Function.Intrinsic.Control.ElseIf(V.DataTable.dtPreload(V.Local.iC).SHEET_METAL_LENGTH!FieldValTrim,<>,"")
+		Function.Intrinsic.Control.AndIf(V.DataTable.dtPreload(V.Local.iC).SHEET_METAL_LENGTH!FieldValTrim,<>,"in")
+		Function.Intrinsic.Control.AndIf(v.DataTable.dtPreload(V.Local.iC).SHEET_METAL_LENGTH!FieldValTrim,<>,"0.000 in")
+		Function.Intrinsic.Control.AndIf(v.DataTable.dtPreload(V.Local.iC).SHEET_METAL_LENGTH!FieldValTrim,<>,"0.0000 in")
+			F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR CUT PART WITH LENGTH AND Sheet Metal Length DIMENSIONS - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+			F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+		Function.Intrinsic.Control.EndIf
+	Function.Intrinsic.Control.EndIf
+
+	'CHECKING FOR CUT PART WITHOUT "in" FOR THE UOM
+	Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).STOCKNUMBER!FieldValTrim,<>,"")
+		Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).G_L!FieldValTrim,<>,"")
+		Function.Intrinsic.Control.AndIf(V.DataTable.dtPreload(V.Local.iC).G_L!FieldValTrim,<>,"in")
+			Function.Intrinsic.String.IsInString(v.DataTable.dtPreload(V.Local.iC).G_L!FieldValTrim,"in",True,V.Local.bRet)
+			Function.Intrinsic.Control.If(V.Local.bRet,=,False)
+				F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR CUT PART WITHOUT IN UOM - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+				F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+			Function.Intrinsic.Control.EndIf
+		Function.Intrinsic.Control.Else
+			Function.Intrinsic.String.IsInString(v.DataTable.dtPreload(V.Local.iC).SHEET_METAL_WIDTH!FieldValTrim,"in",True,V.Local.bRet)
+			Function.Intrinsic.Control.If(V.Local.bRet,=,False)
+				F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR CUT PART WITHOUT IN UOM - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+				F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+			Function.Intrinsic.Control.Else
+				Function.Intrinsic.String.IsInString(v.DataTable.dtPreload(V.Local.iC).SHEET_METAL_WIDTH!FieldValTrim,"in",True,V.Local.bRet)
+				Function.Intrinsic.Control.If(V.Local.bRet,=,False)
+					F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR CUT PART WITHOUT IN UOM - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+					F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+				Function.Intrinsic.Control.EndIf
+			Function.Intrinsic.Control.EndIf				
+		Function.Intrinsic.Control.EndIf
+	Function.Intrinsic.Control.EndIf
+	
+	'GETTING RID OF in FROM LENGTH, Sheet Metal Width, AND Sheet Metal Length
+	Function.Intrinsic.String.Replace(V.Datatable.dtPreload(V.Local.iC).G_L!FieldValTrim, "in","", V.Local.sRet)
+	Function.Data.DataTable.SetValue("dtPreload", V.Local.iC, "G_L", V.Local.sRet.Trim)
+	Function.Intrinsic.String.Replace(V.Datatable.dtPreload(V.Local.iC).SHEET_METAL_WIDTH!FieldValTrim, "in","", V.Local.sRet)
+	Function.Data.DataTable.SetValue("dtPreload", V.Local.iC, "SHEET_METAL_WIDTH", V.Local.sRet.Trim)
+	Function.Intrinsic.String.Replace(V.Datatable.dtPreload(V.Local.iC).SHEET_METAL_LENGTH!FieldValTrim, "in","", V.Local.sRet)
+	Function.Data.DataTable.SetValue("dtPreload", V.Local.iC, "SHEET_METAL_LENGTH", V.Local.sRet.Trim)
+
+	'CHECK FOR BLANK M/P
+	Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).SOURCE!FieldValTrim,=,"")
+		F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR BLANK SOURCE CODE - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+		F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+	Function.Intrinsic.Control.EndIf
+
+	'CHECK FOR PURCHASED PARTS NOT ALREADY IN INVENTORY
+	Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).SOURCE!FieldValTrim,=,"P")
+		Function.Intrinsic.String.GSSPartString(V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.DataTable.dtPreload(V.Local.iC).REVISION!FieldValTrim,v.Local.sRet)
+		Function.Global.Inventory.GetPartInfo(v.Local.sRet,"",V.Local.sRet)
+		Function.Intrinsic.Control.If(V.Local.sRet,=,"***NOPARTFOUND***")
+			F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR PURCHASED PART NOT IN INVENTORY - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+			F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+		Function.Intrinsic.Control.EndIf
+	Function.Intrinsic.Control.EndIf
+
+	'CHECK FOR REVISION LENGTH (WHEN REVISION IS NOT BLANK)
+	Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).REVISION!FieldValTrim,<>,"")
+		Function.Intrinsic.String.Len(V.DataTable.dtPreload(V.Local.iC).REVISION!FieldValTrim,V.Local.i2)
+		Function.Intrinsic.Control.If(V.Local.i2,<>,3)
+			F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR INCORRECT REVISION LENGTH - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+			F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+		Function.Intrinsic.Control.EndIf
+	Function.Intrinsic.Control.EndIf
+
+	'CHECK FOR "DO NOT USE" IN GS PART DESCRIPTION
+	Function.Intrinsic.String.GSSPartString(V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.DataTable.dtPreload(V.Local.iC).REVISION!FieldValTrim,v.Local.sRet)
+	Function.Global.Inventory.GetPartInfo(v.Local.sRet,"",v.Local.sRet)
+	Function.Intrinsic.Control.If(V.Local.sRet,<>,"***NOPARTFOUND***")
+		Function.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+		Function.Intrinsic.String.UCase(V.Local.sRet(1).Trim,V.Local.sRet(1).Trim)
+		Function.Intrinsic.String.IsInString(V.Local.sRet(1).Trim,"DO NOT USE",True,V.Local.bRet)
+		Function.Intrinsic.Control.If(v.Local.bRet,=,True)
+			Function.Intrinsic.String.Split(V.Local.sRet(1).Trim, "DO NOT USE",V.Local.sSQL)
+			Function.Intrinsic.Control.If(v.Local.sRet(1).Trim,<>,V.DataTable.dtPreload(V.Local.ic).DESCRIPTION!FieldValTrim)
+				Function.Intrinsic.String.Build("{2}{3}RECORD FAILED FOR DO NOT USE PART STATUS - ALTERNATE PART = {0} FOR PART {1}",V.Local.sSQL(1).Trim,V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+				'F.Intrinsic.UI.Msgbox(v.Local.sRet(1).Trim,"BOM Compare")
+			Function.Intrinsic.Control.EndIf
+		Function.Intrinsic.Control.EndIf
+	Function.Intrinsic.Control.EndIf
+
+	'CHECK FOR "DO NOT USE" IN GS PART DESCRIPTION FOR STOCKNUMBER PART
+	'CHECK FOR STOCK NUMBER EXISITNG IN INVENTORY
+	Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).STOCKNUMBER!FieldValTrim,<>,"")
+		Function.Global.Inventory.GetPartInfo(V.DataTable.dtPreload(V.Local.iC).STOCKNUMBER!FieldValTrim,"",v.Local.sRet)
+		Function.Intrinsic.Control.If(V.Local.sRet,<>,"***NOPARTFOUND***")
+			Function.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+			Function.Intrinsic.String.UCase(V.Local.sRet(1).Trim,V.Local.sRet(1).Trim)
+			Function.Intrinsic.String.IsInString(V.Local.sRet(1).Trim,"DO NOT USE",True,V.Local.bRet)
+			Function.Intrinsic.Control.If(v.Local.bRet,=,True)
+				Function.Intrinsic.String.Split(V.Local.sRet(1).Trim, "DO NOT USE",V.Local.sSQL)
+				Function.Intrinsic.Control.If(v.Local.sRet(1).Trim,<>,V.DataTable.dtPreload(V.Local.ic).DESCRIPTION!FieldValTrim)
+					Function.Intrinsic.String.Build("{2}{3}RECORD FAILED FOR DO NOT USE PART STATUS - ALTERNATE PART = {0} FOR PART {1}",V.Local.sSQL(1).Trim,V.DataTable.dtPreload(V.Local.iC).Stock_Number!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+					'F.Intrinsic.UI.Msgbox(v.Local.sRet(1).Trim,"BOM Compare")
+				Function.Intrinsic.Control.EndIf
+			Function.Intrinsic.Control.EndIf
+		Function.Intrinsic.Control.Else	
+			F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR PURCHASED PART (STOCK NUMBER)  - NOT IN INVENTORY - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+			F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+		Function.Intrinsic.Control.EndIf
+	Function.Intrinsic.Control.EndIf
+
+	'CHECK FOR PART LENGTH <= 17
+	Function.Intrinsic.String.Len(V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.i2)
+	Function.Intrinsic.Control.If(V.Local.i2,>,17)
+		F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR PART NUMBER LENGTH (TOO LONG) - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+		F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+	Function.Intrinsic.Control.EndIf
+
+	'CHECK FOR LOWER CASE LETTERS IN PART NUMBER
+	Function.Intrinsic.String.UCase(V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,v.Local.sRet)
+	Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,<>,V.Local.sRet)
+		F.Intrinsic.String.Build("{1}{2}RECORD FAILED FOR LOWER CASE CHARACTERS IN PART NUMBER - {0}",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+		F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+	Function.Intrinsic.Control.EndIf
+
+'Function.Intrinsic.Control.Next(V.Local.iC)
+
+'Function.Intrinsic.Control.For(V.Local.iC,0,v.DataTable.dtPreload.RowCount--,1)
+	'Function.Intrinsic.UI.ChangeWaitStatus("Checking Warning/Informational Exceptions",V.Local.iC,0,V.DataTable.dtPreload.RowCount--)
+
+	'CHECK FOR CUT PART WITH A SOURCE CODE OF PURCHASED
+	'Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).STOCKNUMBER!FieldValTrim,<>,"")
+	'Function.Intrinsic.Control.AndIf(V.DataTable.dtPreload(V.Local.iC).SOURCE!FieldValTrim,=,"P")
+		'F.Intrinsic.UI.Msgbox("WARNING - CUT PART LABELED AS PURCHASED","BOM Compare")
+	'Function.Intrinsic.Control.EndIf
+
+	'CHECK FOR MISMATCH BETWEEN SOURCE CODE, AND PRE-EXISTING (IF EXISTS) SOURCE CODE IN INVENTORY
+	'Function.Intrinsic.String.GSSPartString(V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.DataTable.dtPreload(V.Local.iC).REVISION!FieldValTrim,v.Local.sRet)
+	'Function.Intrinsic.String.Build("SELECT CODE_SOURCE FROM V_INVENTORY_MST2 WHERE PART = '{0}'", V.Local.sRet,v.Local.sSQL)
+	'Function.ODBC.Connection!conx.ExecuteAndReturn(V.Local.sSQL,V.Local.sSQL)
+	'Function.Intrinsic.Control.If(V.Ambient.ExecuteAndReturnEOF,=,False)
+	'Function.Intrinsic.Control.AndIf(V.Local.sSQL.Trim,<>,V.DataTable.dtPreload(V.Local.iC).SOURCE!FieldValTrim)
+		'F.Intrinsic.UI.Msgbox("WARNING - SOURCE CODE DOESN'T MATCH INVENTORY SORT CODE","BOM Compare")
+	'Function.Intrinsic.Control.EndIf
+
+	'CHECK FOR BLANK REVISION
+	'Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).REVISION!FieldValTrim,=,"")
+		'F.Intrinsic.UI.Msgbox("INFORMATIONAL - REVISION IS BLANK","BOM Compare")
+	'Function.Intrinsic.Control.EndIf
+
+	'CHECK FOR DESCRIPTION > 30 CHARACTERS
+	'Function.Intrinsic.String.Len(V.DataTable.dtPreload(V.Local.iC).DESCRIPTION!FieldValTrim,V.Local.i2)
+	'Function.Intrinsic.Control.If(v.Local.i2,>,30)
+		'Function.Intrinsic.Control.CallSub(z_addfailure,"iC",V.Local.iC,"FILE_STATUS","INFORMATIONAL","MESSAGE","INFORMATIONAL - DESCRIPTION IS GREATER THAN 30 CHARACTERS, AND WILL BE TRUNCATED")
+	'Function.Intrinsic.Control.EndIf
+
+	'CHECKING FOR NEW F PARTS
+	'Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).SOURCE!FieldValTrim,=,"F")
+		'Function.Intrinsic.String.GSSPartString(V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.DataTable.dtPreload(V.Local.iC).REVISION!FieldValTrim,v.Local.sRet)
+		'Function.Global.Inventory.GetPartInfo(v.Local.sRet,"",v.Local.sRet)
+		'Function.Intrinsic.Control.If(V.Local.sRet,=,"***NOPARTFOUND***")
+			'Function.Intrinsic.Control.CallSub(z_addfailure,"iC",V.Local.iC,"FILE_STATUS","INFORMATIONAL","MESSAGE","INFORMATIONAL - NEW F PART BEING ADDED TO INVENTORY")
+		'Function.Intrinsic.Control.EndIf
+	'Function.Intrinsic.Control.EndIf
+
+	'CHECKING FOR DESCRIPTION NOT MATCHING INVENTORY DESCRIPTION
+	'Function.Intrinsic.String.GSSPartString(V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.DataTable.dtPreload(V.Local.iC).REVISION!FieldValTrim,v.Local.sRet)
+	'Function.Global.Inventory.GetPartInfo(v.Local.sRet,"",v.Local.sRet)
+	'Function.Intrinsic.Control.If(V.Local.sRet,<>,"***NOPARTFOUND***")
+		'Function.Intrinsic.String.Split(v.Local.sRet,"*!*",v.Local.sRet)
+		'Function.Intrinsic.Control.If(v.Local.sRet(1).Trim,<>,V.DataTable.dtPreload(V.Local.ic).DESCRIPTION!FieldValTrim)
+			'Function.Intrinsic.Control.CallSub(z_addfailure,"iC",V.Local.iC,"FILE_STATUS","INFORMATIONAL","MESSAGE","INFORMATIONAL - UPLOAD DESCRIPTION DOESN'T MATCH INVENTORY DESCRIPTION")
+		'Function.Intrinsic.Control.EndIf
+	'Function.Intrinsic.Control.EndIf
+	
+	'IF STOCKNUMBER IS POPULATED AND M/P = "P" - remove the stock number. 
+	Function.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).STOCKNUMBER!FieldValTrim,<>,"")
+	Function.Intrinsic.Control.AndIf(V.DataTable.dtPreload(V.Local.iC).SOURCE!FieldValTrim,=,"P")
+		F.Intrinsic.String.Build("{1}{2}INFORMATIONAL - SOURCE IS PURCHASED, BUT STOCKNUMBER WAS PROVIDED FOR PART {0}.",V.DataTable.dtPreload(V.Local.iC).PartNo!FieldValTrim,V.Local.sErrors,V.Ambient.NewLine,V.Local.sErrors)
+		F.Intrinsic.Math.Add(V.Local.iErrors,1,V.Local.iErrors)
+		Function.Data.DataTable.SetValue("dtPreload", V.Local.iC, "STOCKNUMBER", "")
+	Function.Intrinsic.Control.EndIf
+	
+	'Build a line for the stock number
+	F.Intrinsic.Control.If(V.DataTable.dtPreload(V.Local.iC).STOCKNUMBER!FieldValTrim,<>,"")
+		'Okay, there is a stock number so we need to add a line but is it sheet metal or structural
+		Function.Intrinsic.Control.If(V.Datatable.dtPreload(V.Local.iC).G_L!FieldVal,<>,"")
+			'Qty comes from G_L for the line
+			'Make sure G_L is > 0
+			V.Local.fQty.Set(V.Datatable.dtPreload(V.Local.iC).G_L!FieldValFloat)
+		Function.Intrinsic.Control.Else
+			'Qty comes from the sheet metal area
+			'Make sure length and width are both > 0
+			Function.Intrinsic.Math.Mult(V.Datatable.dtPreload(V.Local.iC).SHEET_METAL_WIDTH!FieldValFloat,V.Datatable.dtPreload(V.Local.iC).SHEET_METAL_LENGTH!FieldValFloat,V.Local.fQty)
+		Function.Intrinsic.Control.EndIf
+		F.Intrinsic.Control.If(V.Local.fQty,>,0)
+			F.Intrinsic.String.Format(V.Local.fQty,"0.0#####",V.Local.sQty)
+			F.Data.DataTable.SetValue("dtPreload",V.Local.iC,"CATEGORY","P")
+			F.Data.DataTable.AddRow("dtPreload","PARENT",V.DataTable.dtPreload(V.Local.iC).PARTNO!FieldValTrim,"PARTNO",V.DataTable.dtPreload(V.Local.iC).STOCKNUMBER!FieldValTrim,"QUANTITY",V.Local.sQty,"SEQUENCE","1","DESCRIPTION","PURCHASED PART","SOURCE","P")
+		F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.EndIf
+Function.Intrinsic.Control.Next(V.Local.iC)
+
+F.Intrinsic.Control.If(V.Local.iErrors,>,0)
+	F.Intrinsic.String.Concat(V.Caller.LocalGSSTempDir,"\BOMCOMPARE_ERROR.txt",V.Local.sFile)
+	F.Intrinsic.File.String2File(V.Local.sFile,V.Local.sErrors)
+	F.Intrinsic.Task.ShellExecSync(0,"",V.Local.sFile,"","",1)
+F.Intrinsic.Control.EndIf
+
+Program.Sub.4_VerifyData.End
+
+Program.Sub.preLoad.Start
+V.Local.bInstr.Declare
+V.Local.bOnFirst.Declare
+V.Local.bSource.Declare
+V.Local.iTitles.Declare
+V.Local.iFor.Declare
+V.Local.iFor2.Declare
+V.Local.iLen.Declare
+V.Local.iRows.Declare
+V.Local.sChild.Declare
+V.Local.sGSSPart.Declare
+V.Local.sParent.Declare
+V.Local.sRet.Declare
+V.Local.sRow.Declare
+V.Local.sSel.Declare
+V.Local.sSQL.Declare
+V.Local.sTitleArray.Declare
+V.Local.sTitles.Declare
+
+'Connect
+F.Intrinsic.Control.CallSub(connect)
+
+F.Intrinsic.UI.InvokeWaitDialog("Loading BDF","BOM Compare")
+
+'Close dtPreload if it exists
+F.Intrinsic.Control.If(V.DataTable.dtPreload.Exists,=,True)
+	F.Data.DataTable.DeleteRow("dtPreload")
+	F.Data.DataTable.Close("dtPreload")
+F.Intrinsic.Control.EndIf
+
+'Load the BDF to dtPreLoad
+F.Intrinsic.BDF.Load("bdfPreload","Main-PrePopulate-bdf")
+
+'Load the BDF Titles
+F.Intrinsic.BDF.ReadColumnTitle("bdfPreload",V.Local.sTitles)
+
+'Split the titles and loop through them to create columns in dtPreload
+F.Intrinsic.String.Split(V.Local.sTitles,"*!*",V.Local.sTitleArray)
+F.Data.DataTable.Create("dtPreload",True)
+V.Local.iTitles.Set(V.Local.sTitleArray.UBound)
+F.Intrinsic.Control.For(V.Local.iFor,0,V.Local.iTitles,1)
+	F.Intrinsic.UI.ChangeWaitStatus("Creating Data Table",V.Local.iFor,0,V.Local.iTitles)
+	F.Data.DataTable.AddColumn("dtPreload",V.Local.sTitleArray(V.Local.iFor).UCase,"String")
+F.Intrinsic.Control.Next(V.Local.iFor)
+
+'Load the bdf rows into dtPreload
+F.Intrinsic.BDF.ReadRowCount("bdfPreload",V.Local.iRows)
+F.Intrinsic.Math.Sub(V.Local.iRows,1,V.Local.iRows)
+F.Intrinsic.Control.For(V.Local.iFor,0,V.Local.iRows,1)
+	F.Intrinsic.UI.ChangeWaitStatus("Loading BDF to Data Table",V.Local.iFor,0,V.Local.iRows)
+	F.Intrinsic.BDF.ReadRow("bdfPreload",V.Local.iFor,V.Local.sRow)
+	F.Intrinsic.String.Split(V.Local.sRow,"|~|",V.Local.sRow)
+	V.Local.bOnFirst.Set(False)
+	F.Intrinsic.Control.For(V.Local.iFor2,0,V.Local.iTitles,1)
+		F.Intrinsic.Control.If(V.Local.bOnFirst,=,False)
+			F.Data.DataTable.AddRow("dtPreload",V.Local.sTitleArray(V.Local.iFor2),V.Local.sRow(V.Local.iFor2))
+		F.Intrinsic.Control.Else
+			F.Data.DataTable.SetValue("dtPreload",V.Local.iFor,V.Local.sTitleArray(V.Local.iFor2),V.Local.sRow(V.Local.iFor2))
+		F.Intrinsic.Control.EndIf
+		V.Local.bOnFirst.Set(True)
+	F.Intrinsic.Control.Next(V.Local.iFor2)
+F.Intrinsic.Control.Next(V.Local.iFor)
+
+F.Intrinsic.Control.CallSub(4_VerifyData)
+
+'Clone the bdf
+F.Intrinsic.BDF.Clone("bdfPreload","bdfClone")
+
+'Redim sRow
+V.Local.sRow.Redim(0,0)
+V.Local.sRow.Set("")
+
+'Loop through dtPreLoad
+F.Intrinsic.Control.For(V.Local.iFor,0,V.DataTable.dtPreload.RowCount--,1)
+	'Post to the bdfClone
+	F.Intrinsic.String.Replace(V.DataTable.dtPreload(V.Local.iFor).FullRow,"*!*","|~|",V.Local.sRow)
+	F.Intrinsic.BDF.WriteRow("bdfClone",V.Local.sRow)
+F.Intrinsic.Control.Next(V.Local.iFor)
+
+F.Intrinsic.BDF.Save("bdfClone","Main-PrePopulate-bdf")
+
+F.Intrinsic.Control.CallSub(unload)
+Program.Sub.preLoad.End
+
+Program.Sub.preUpload.Start
+V.Local.bExists.Declare
+V.Local.bInstr.Declare
+V.Local.bRouter.Declare
+V.Local.bOnFirst.Declare
+V.Local.iFor.Declare
+V.Local.iFor2.Declare
+V.Local.iLen.Declare
+V.Local.iRows.Declare
+V.Local.iTitles.Declare
+V.Local.sGSSPart.Declare
+V.Local.sRange.Declare
+V.Local.sRet.Declare
+V.Local.sRouter.Declare
+V.Local.sRow.Declare
+V.Local.sSQL.Declare
+V.Local.sTitleArray.Declare
+V.Local.sTitles.Declare
+
+'Connect
+F.Intrinsic.Control.CallSub(connect)
+
+F.Intrinsic.UI.InvokeWaitDialog("Loading BDF","BOM Compare")
+
+'Close dtPreUpload if it exists
+F.Intrinsic.Control.If(V.DataTable.dtPreUpload.Exists,=,True)
+	F.Data.DataTable.DeleteRow("dtPreUpload")
+	F.Data.DataTable.Close("dtPreUpload")
+F.Intrinsic.Control.EndIf
+
+'Load the BDF to dtPreUpload
+F.Intrinsic.BDF.Load("bdfPreUpload","Main-PreProcessCompleteData-ReadOnly-bdf")
+
+'F.Intrinsic.BDF.Load("bdfPreUpload","Main-PreProcessData-bdf")
+
+'Load the BDF Titles
+F.Intrinsic.BDF.ReadColumnTitle("bdfPreUpload",V.Local.sTitles)
+
+'Split the titles and loop through them to create columns in dtPreUpload
+F.Intrinsic.String.Split(V.Local.sTitles,"*!*",V.Local.sTitleArray)
+F.Data.DataTable.Create("dtPreUpload",True)
+V.Local.iTitles.Set(V.Local.sTitleArray.UBound)
+F.Intrinsic.Control.For(V.Local.iFor,0,V.Local.iTitles,1)
+	F.Intrinsic.UI.ChangeWaitStatus("Creating Data Table",V.Local.iFor,0,V.Local.iTitles)
+	F.Data.DataTable.AddColumn("dtPreUpload",V.Local.sTitleArray(V.Local.iFor),"String")
+F.Intrinsic.Control.Next(V.Local.iFor)
+
+'Load the bdf rows into dtPreUpload
+F.Intrinsic.BDF.ReadRowCount("bdfPreUpload",V.Local.iRows)
+F.Intrinsic.Math.Sub(V.Local.iRows,1,V.Local.iRows)
+F.Intrinsic.Control.For(V.Local.iFor,0,V.Local.iRows,1)
+	F.Intrinsic.UI.ChangeWaitStatus("Loading BDF to Data Table",V.Local.iFor,0,V.Local.iRows)
+	F.Intrinsic.BDF.ReadRow("bdfPreUpload",V.Local.iFor,V.Local.sRow)
+	F.Intrinsic.String.Split(V.Local.sRow,"|~|",V.Local.sRow)
+	V.Local.bOnFirst.Set(False)
+	F.Intrinsic.Control.For(V.Local.iFor2,0,V.Local.iTitles,1)
+		F.Intrinsic.Control.If(V.Local.bOnFirst,=,False)
+			F.Data.DataTable.AddRow("dtPreUpload",V.Local.sTitleArray(V.Local.iFor2),V.Local.sRow(V.Local.iFor2))
+		F.Intrinsic.Control.Else
+			F.Data.DataTable.SetValue("dtPreUpload",V.Local.iFor,V.Local.sTitleArray(V.Local.iFor2),V.Local.sRow(V.Local.iFor2))
+		F.Intrinsic.Control.EndIf
+		V.Local.bOnFirst.Set(True)
+	F.Intrinsic.Control.Next(V.Local.iFor2)
+F.Intrinsic.Control.Next(V.Local.iFor)
+
+F.Intrinsic.Control.CallSub(UploadCutlist)
+
+F.Intrinsic.Control.CallSub(unload)
+Program.Sub.preUpload.End
+
+Program.Sub.postUpload.Start
+V.Local.bAlt.Declare
+V.Local.bBin.Declare
+V.Local.bCustomer.Declare
+V.Local.bExtra.Declare
+V.Local.bInstr.Declare
+V.Local.bLoop.Declare
+V.Local.bOnFirst.Declare
+V.Local.bRebuild.Declare
+V.Local.bVendor.Declare
+V.Local.iTitles.Declare
+V.Local.iFor.Declare
+V.Local.iFor2.Declare
+V.Local.iLen.Declare
+V.Local.iRows.Declare
+V.Local.sGSSPart.Declare
+V.Local.sParents.Declare
+V.Local.sRange.Declare
+V.Local.sRet.Declare
+V.Local.sRow.Declare
+V.Local.sSel.Declare
+V.Local.sSQL.Declare
+V.Local.sTitleArray.Declare
+V.Local.sTitles.Declare
+
+'Connect
+F.Intrinsic.Control.CallSub(connect)
+
+F.Intrinsic.UI.InvokeWaitDialog("Loading BDF","BOM Compare")
+
+'Close dtPostUpload if it exists
+F.Intrinsic.Control.If(V.DataTable.dtPostUpload.Exists,=,True)
+	F.Data.DataTable.DeleteRow("dtPostUpload")
+	F.Data.DataTable.Close("dtPostUpload")
+F.Intrinsic.Control.EndIf
+
+'Load the BDF to dtPreLoad
+F.Intrinsic.BDF.Load("bdfPostUpload","Main-PostProcessCompleteData-ReadOnly-bdf")
+'F.Intrinsic.BDF.Load("bdfPostUpload","Main-PostProcessData-bdf")
+
+'Load the BDF Titles
+F.Intrinsic.BDF.ReadColumnTitle("bdfPostUpload",V.Local.sTitles)
+
+'Split the titles and loop through them to create columns in dtPreload
+F.Intrinsic.String.Split(V.Local.sTitles,"*!*",V.Local.sTitleArray)
+F.Data.DataTable.Create("dtPostUpload",True)
+V.Local.iTitles.Set(V.Local.sTitleArray.UBound)
+F.Intrinsic.Control.For(V.Local.iFor,0,V.Local.iTitles,1)
+	F.Intrinsic.UI.ChangeWaitStatus("Creating Data Table",V.Local.iFor,0,V.Local.iTitles)
+	F.Data.DataTable.AddColumn("dtPostUpload",V.Local.sTitleArray(V.Local.iFor).UCase,"String")
+F.Intrinsic.Control.Next(V.Local.iFor)
+
+'Load the bdf rows into dtPostUpload
+F.Intrinsic.BDF.ReadRowCount("bdfPostUpload",V.Local.iRows)
+F.Intrinsic.Math.Sub(V.Local.iRows,1,V.Local.iRows)
+F.Intrinsic.Control.For(V.Local.iFor,0,V.Local.iRows,1)
+	F.Intrinsic.UI.ChangeWaitStatus("Loading BDF to Data Table",V.Local.iFor,0,V.Local.iRows)
+	F.Intrinsic.BDF.ReadRow("bdfPostUpload",V.Local.iFor,V.Local.sRow)
+	F.Intrinsic.String.Split(V.Local.sRow,"|~|",V.Local.sRow)
+	V.Local.bOnFirst.Set(False)
+	F.Intrinsic.Control.For(V.Local.iFor2,0,V.Local.iTitles,1)
+		F.Intrinsic.Control.If(V.Local.bOnFirst,=,False)
+			F.Data.DataTable.AddRow("dtPostUpload",V.Local.sTitleArray(V.Local.iFor2),V.Local.sRow(V.Local.iFor2))
+		F.Intrinsic.Control.Else
+			F.Data.DataTable.SetValue("dtPostUpload",V.Local.iFor,V.Local.sTitleArray(V.Local.iFor2),V.Local.sRow(V.Local.iFor2))
+		F.Intrinsic.Control.EndIf
+		V.Local.bOnFirst.Set(True)
+	F.Intrinsic.Control.Next(V.Local.iFor2)
+F.Intrinsic.Control.Next(V.Local.iFor)
+
+F.Intrinsic.Control.CallSub(disconnect)
+Program.Sub.postUpload.End
+
+Program.Sub.Connect.Start
+F.ODBC.Connection!conx.OpenCompanyConnection
+Program.Sub.Connect.End
+
+Program.Sub.Disconnect.Start
+F.ODBC.Connection!conx.Close
+Program.Sub.Disconnect.End
+
+
+Program.Sub.UploadCutlist.Start
+V.Local.bCutlist.Declare
+V.Local.fEst.Declare
+V.Local.fLength.Declare
+V.Local.fWidth.Declare
+V.Local.iFor.Declare
+V.Local.sDesc.Declare
+V.Local.sLeft.Declare
+V.Local.sPart.Declare
+V.Local.sProperty.Declare
+V.Local.sRet.Declare
+V.Local.sRev.Declare
+V.Local.sRouter.Declare
+V.Local.sSel.Declare
+V.Local.sSplit.Declare
+V.Local.sSQL.Declare
+V.Local.sWC.Declare
+
+F.Intrinsic.Control.For(V.Local.iFor,0,V.DataTable.dtPreUpload.RowCount--,1)
+	F.Intrinsic.UI.ChangeWaitStatus("Uploading Cut Lists",V.Local.iFor,0,V.DataTable.dtPreUpload.RowCount--)
+	V.Local.bCutlist.Set(False)
+	F.Intrinsic.Control.If(V.DataTable.dtPreUpload(V.Local.iFor).UM!FieldValTrim,=,"SI",or,V.DataTable.dtPreUpload(V.Local.iFor).UM!FieldValTrim,=,"IN")
+		V.Local.bCutlist.Set(True)
+	F.Intrinsic.Control.EndIf
+	F.Intrinsic.Control.If(V.Local.bCutlist,=,True)
+		'It's a cutlist item so add the record
+		F.Intrinsic.String.Build("select * from BOM_CUTLIST where PART = '{0}' and COMPONENT = '{1}'",V.DataTable.dtPreUpload(V.Local.iFor).PARENT!FieldValTrim,V.DataTable.dtPreUpload(V.Local.iFor).PARTNO!FieldValTrim,V.Local.sSQL)
+		F.ODBC.Connection!conx.OpenLocalRecordsetRW("rstAdd",V.Local.sSQL)
+		F.Intrinsic.Control.If(V.ODBC.conx!rstAdd.EOF,=,True)
+			F.ODBC.Conx!rstAdd.AddNew
+			F.ODBC.Conx!rstAdd.Set!PART(V.DataTable.dtPreUpload(V.Local.iFor).PARENT!FieldValTrim)
+			F.ODBC.Conx!rstAdd.Set!COMPONENT(V.DataTable.dtPreUpload(V.Local.iFor).PARTNO!FieldValTrim)
+			F.ODBC.Conx!rstAdd.Set!SEQ("000000")
+			F.ODBC.Conx!rstAdd.Set!CUTLIST_ITEM("0001")
+			F.Intrinsic.String.Left(V.DataTable.dtPreUpload(V.Local.iFor).PARENT!FieldValTrim,17,V.Local.sPart)
+			F.Intrinsic.String.Mid(V.DataTable.dtPreUpload(V.Local.iFor).PARENT!FieldValTrim,18,3,V.Local.sRev)
+			F.Intrinsic.String.Build("PARTNO = '{0}' and REVISION = '{1}'",V.Local.sPart.Trim,V.Local.sRev.Trim,V.Local.sSel)
+			F.Data.DataTable.Select("dtPreUpload",V.Local.sSel,V.Local.sRet)
+			F.Intrinsic.Control.If(V.Local.sRet,<>,"***NORETURN***")
+				F.Intrinsic.String.Split(V.Local.sRet,"*!*",V.Local.sRet)
+				V.Local.sDesc.Set(V.DataTable.dtPreUpload(V.Local.sRet(0)).Description!FieldValTrim)
+				'V.Local.sRouter.Set(V.DataTable.dtPreUpload(V.Local.sRet(0)).Router!FieldValTrim)
+				V.Local.sRouter.Set("0")
+			F.Intrinsic.Control.Else
+				V.Local.sDesc.Set("")
+				V.Local.sRouter.Set("0")
+			F.Intrinsic.Control.EndIf
+			'F.Intrinsic.String.Left(V.DataTable.dtPreUpload(V.Local.iFor).PARTNO!FieldValTrim,1,V.Local.sLeft)
+			F.Intrinsic.Control.If(V.DataTable.dtPreUpload(V.Local.iFor).UM!FieldValTrim,=,"SI")
+				V.Local.sProperty.Set("PLAS")
+				V.Local.sWC.Set("PLAS")
+				'V.Local.sSplit.Redim(0,0)
+				'F.Intrinsic.String.Split(V.DataTable.dtPreUpload(V.Local.iFor).Blank!FieldValTrim," ",V.Local.sSplit)
+				'V.Local.fWidth.Set(V.Local.sSplit(0))
+				'V.Local.fLength.Set(V.Local.sSplit(2))
+				V.Local.fLength.Set(V.DataTable.dtPreUpload(V.Local.sRet(0)).Sheet_Metal_Length!FieldVal)
+				V.Local.fWidth.Set(V.DataTable.dtPreUpload(V.Local.sRet(0)).Sheet_Metal_Width!FieldVal)
+				F.Intrinsic.Math.Mult(V.Local.fWidth,V.Local.fLength,V.Local.fEst)
+			'F.Intrinsic.Control.ElseIf(V.Local.sLeft,=,"T")
+				'V.Local.sProperty.Set("LENGTH20")
+				'V.Local.fLength.Set(V.DataTable.dtPreUpload(V.Local.iFor).Length20!FieldVal)
+				'V.Local.fWidth.Set(0)
+				'V.Local.fEst.Set(V.Local.fLength)
+			F.Intrinsic.Control.Else
+				V.Local.sProperty.Set("LENGTH")
+				V.Local.sWC.Set("SAW1")
+				V.Local.fLength.Set(V.DataTable.dtPreUpload(V.Local.sRet(0)).G_L!FieldVal)
+				V.Local.fWidth.Set(0)
+				V.Local.fEst.Set(V.Local.fLength)
+			F.Intrinsic.Control.EndIf
+			F.ODBC.conx!rstAdd.Set!DIMENSION_1(V.Local.fLength)
+			F.ODBC.conx!rstAdd.Set!DIMENSION_2(V.Local.fWidth)
+			F.ODBC.conx!rstAdd.Set!PROPERTY_CODE(V.Local.sProperty)
+			F.ODBC.conx!rstAdd.Set!DRAWING_NO(V.Local.sDesc.Left16)
+			'F.Intrinsic.String.Build("select top 1 A.PART_WC_OUTSIDE from V_ROUTER_LINE A left outer join DUN_BOM_C_ROUTER B on A.ROUTER = B.ROUTER where B.ID = '{0}' and A.LMO = 'L' order by A.LINE_ROUTER",V.Local.sRouter,V.Local.sSQL)
+			'F.ODBC.Connection!con.OpenLocalRecordsetRO("rstSel",V.Local.sSQL)
+			'F.Intrinsic.Control.If(V.ODBC.conx!rstSel.EOF,=,False)
+				'V.Local.sWC.Set(V.ODBC.conx!rstSel.FieldValTrim!PART_WC_OUTSIDE)
+			'F.Intrinsic.Control.Else
+				'V.Local.sWC.Set("")
+			'F.Intrinsic.Control.EndIf
+			'F.ODBC.conx!rstSel.Close
+			F.ODBC.conx!rstAdd.Set!WORKCENTER(V.Local.sWC)
+			F.ODBC.conx!rstAdd.Set!PIECES(1)
+			F.ODBC.conx!rstAdd.Set!EST_UM_UNITS(V.Local.fEst)
+			F.ODBC.conx!rstAdd.Update
+		F.Intrinsic.Control.EndIf
+		F.ODBC.conx!rstAdd.Close
+	F.Intrinsic.Control.EndIf
+F.Intrinsic.Control.Next(V.Local.iFor)
+Program.Sub.UploadCutlist.End
+
+Program.Sub.Comments.Start
+${$0$}$Inventor Interface$}$BRIAN$}$5/20/2017 12:58:42 PM$}$False
+Program.Sub.Comments.End
